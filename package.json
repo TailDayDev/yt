@@ -1,6 +1,6 @@
 {
   "name": "@tailday/yt",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TailDay YouTrack CLI",
   "private": false,
   "bin": {
@@ -13,7 +13,9 @@
     "tests",
     "yt",
     "yt_params_schema.js",
-    "README.md"
+    "README.md",
+    "Screenshot 2026-04-06 at 10.31.05.png",
+    "Screenshot 2026-04-06 at 10.31.36.png"
   ],
   "license": "UNLICENSED",
   "engines": {
