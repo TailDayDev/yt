@@ -1,0 +1,22 @@
+{
+  "name": "@tailday/yt",
+  "version": "0.1.0",
+  "description": "TailDay YouTrack CLI",
+  "private": false,
+  "bin": {
+    "yt": "./yt"
+  },
+  "files": [
+    "api",
+    "config",
+    "skill",
+    "tests",
+    "yt",
+    "yt_params_schema.js",
+    "README.md"
+  ],
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20 <23"
+  }
+}

@@ -1,0 +1,283 @@
+#!/usr/bin/env node
+'use strict';
+
+const packageJson = require('./package.json');
+const { createYouTrackApi } = require('./api');
+const { formatTree } = require('./api/utils');
+const { runTailday802Scenario } = require('./tests/scenario');
+
+function printUsage() {
+  console.error(`Usage:
+  yt get ISSUE [--full]
+  yt subtasks ISSUE
+  yt create-subtask ISSUE --summary "Title" --description "Body"
+  yt status ISSUE [STATUS]
+  yt comment ISSUE "Text"
+  yt search "QUERY"
+  yt scenario ISSUE [--cleanup]
+  yt version
+
+  Articles (Knowledge Base):
+  yt article ARTICLE_ID
+  yt articles
+  yt create-article --summary "Title" [--content "Body"] [--tag "name"] [--project PROJECT]
+  yt update-article ARTICLE_ID [--summary "Title"] [--content "Body"]
+  yt delete-article ARTICLE_ID
+  yt tag-article ARTICLE_ID "tag-name" ["tag2" ...]
+
+  Child Articles:
+  yt child-articles ARTICLE_ID
+  yt create-child-article ARTICLE_ID --summary "Title" [--content "Body"] [--tag "name"]
+  yt link-child-article PARENT_ID CHILD_ID`);
+}
+
+function readFlag(args, flagName) {
+  const index = args.indexOf(flagName);
+  if (index === -1) {
+    return null;
+  }
+
+  return args[index + 1] || null;
+}
+
+function readAllFlags(args, flagName) {
+  const values = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === flagName && args[i + 1]) {
+      values.push(args[i + 1]);
+    }
+  }
+  return values;
+}
+
+async function main() {
+  const [, , command, ...args] = process.argv;
+  if (!command) {
+    printUsage();
+    process.exitCode = 1;
+    return;
+  }
+
+  switch (command) {
+    case '--version':
+    case '-v':
+    case 'version': {
+      console.log(packageJson.version);
+      return;
+    }
+    case '--help':
+    case '-h':
+    case 'help': {
+      printUsage();
+      return;
+    }
+    case 'get': {
+      const api = createYouTrackApi();
+      const full = args.includes('--full');
+      const issueId = args.find((a) => !a.startsWith('--'));
+      console.log(JSON.stringify(await api.getIssue(issueId, { full }), null, 2));
+      return;
+    }
+    case 'subtasks': {
+      const api = createYouTrackApi();
+      const result = await api.listSubtasks(args[0]);
+      console.log(formatTree(result.subtasks, 0) || '(no subtasks)');
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    case 'create-subtask': {
+      const api = createYouTrackApi();
+      const issueId = args[0];
+      const summary = readFlag(args, '--summary');
+      const description = readFlag(args, '--description');
+      const priority = readFlag(args, '--priority');
+      const status = readFlag(args, '--status');
+      const assignee = readFlag(args, '--assignee');
+
+      if (!summary) {
+        throw new Error('Missing --summary for create-subtask.');
+      }
+
+      const created = await api.createSubtask(issueId, {
+        assignee: assignee ? { login: assignee } : null,
+        description,
+        priority,
+        status,
+        summary,
+      });
+      console.log(JSON.stringify(created, null, 2));
+      return;
+    }
+    case 'status': {
+      const api = createYouTrackApi();
+      const issueId = args[0];
+      const nextStatus = args.slice(1).join(' ').trim();
+
+      if (!nextStatus) {
+        const issue = await api.getIssue(issueId);
+        console.log(issue.status || '');
+        return;
+      }
+
+      console.log(JSON.stringify(await api.updateStatus(issueId, nextStatus), null, 2));
+      return;
+    }
+    case 'comment': {
+      const api = createYouTrackApi();
+      const issueId = args[0];
+      const text = args.slice(1).join(' ').trim();
+      console.log(JSON.stringify(await api.addComment(issueId, text), null, 2));
+      return;
+    }
+    case 'search': {
+      const api = createYouTrackApi();
+      const query = args.join(' ').trim();
+      console.log(JSON.stringify(await api.searchIssues(query), null, 2));
+      return;
+    }
+    case 'scenario': {
+      const issueId = args[0] || 'TAILDAY-802';
+      const cleanup = args.includes('--cleanup');
+      console.log(
+        JSON.stringify(await runTailday802Scenario({ cleanup, issueId }), null, 2),
+      );
+      return;
+    }
+    case 'article': {
+      const api = createYouTrackApi();
+      const articleId = args[0];
+      if (!articleId) {
+        throw new Error('article requires an ARTICLE_ID argument.');
+      }
+      console.log(JSON.stringify(await api.getArticle(articleId), null, 2));
+      return;
+    }
+    case 'articles': {
+      const api = createYouTrackApi();
+      const articles = await api.listArticles();
+      console.log(JSON.stringify(articles, null, 2));
+      return;
+    }
+    case 'create-article': {
+      const api = createYouTrackApi();
+      const summary = readFlag(args, '--summary');
+      const content = readFlag(args, '--content');
+      const project = readFlag(args, '--project');
+      const tags = readAllFlags(args, '--tag');
+
+      if (!summary) {
+        throw new Error('Missing --summary for create-article.');
+      }
+
+      const created = await api.createArticle({
+        content,
+        projectName: project || undefined,
+        summary,
+        tags: tags.length ? tags : undefined,
+      });
+      console.log(JSON.stringify(created, null, 2));
+      return;
+    }
+    case 'update-article': {
+      const api = createYouTrackApi();
+      const articleId = args[0];
+      if (!articleId) {
+        throw new Error('update-article requires an ARTICLE_ID argument.');
+      }
+
+      const summary = readFlag(args, '--summary');
+      const content = readFlag(args, '--content');
+
+      const updated = await api.updateArticle(articleId, {
+        content,
+        summary,
+      });
+      console.log(JSON.stringify(updated, null, 2));
+      return;
+    }
+    case 'tag-article': {
+      const api = createYouTrackApi();
+      const articleId = args[0];
+      if (!articleId) {
+        throw new Error('tag-article requires an ARTICLE_ID argument.');
+      }
+
+      const tagNames = args.slice(1).filter((a) => !a.startsWith('--'));
+      if (!tagNames.length) {
+        throw new Error('tag-article requires at least one tag name.');
+      }
+
+      const results = await api.tagArticle(articleId, tagNames);
+      console.log(JSON.stringify(results, null, 2));
+      return;
+    }
+    case 'delete-article': {
+      const api = createYouTrackApi();
+      const articleId = args[0];
+      if (!articleId) {
+        throw new Error('delete-article requires an ARTICLE_ID argument.');
+      }
+
+      const result = await api.deleteArticle(articleId);
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    case 'child-articles': {
+      const api = createYouTrackApi();
+      const articleId = args[0];
+      if (!articleId) {
+        throw new Error('child-articles requires an ARTICLE_ID argument.');
+      }
+
+      const children = await api.listChildArticles(articleId);
+      console.log(JSON.stringify(children, null, 2));
+      return;
+    }
+    case 'create-child-article': {
+      const api = createYouTrackApi();
+      const parentId = args[0];
+      if (!parentId) {
+        throw new Error('create-child-article requires a parent ARTICLE_ID argument.');
+      }
+
+      const summary = readFlag(args, '--summary');
+      const content = readFlag(args, '--content');
+      const project = readFlag(args, '--project');
+      const tags = readAllFlags(args, '--tag');
+
+      if (!summary) {
+        throw new Error('Missing --summary for create-child-article.');
+      }
+
+      const created = await api.createChildArticle(parentId, {
+        content,
+        projectName: project || undefined,
+        summary,
+        tags: tags.length ? tags : undefined,
+      });
+      console.log(JSON.stringify(created, null, 2));
+      return;
+    }
+    case 'link-child-article': {
+      const api = createYouTrackApi();
+      const parentId = args[0];
+      const childId = args[1];
+      if (!parentId || !childId) {
+        throw new Error('link-child-article requires PARENT_ID and CHILD_ID arguments.');
+      }
+
+      const linked = await api.linkChildArticle(parentId, childId);
+      console.log(JSON.stringify(linked, null, 2));
+      return;
+    }
+    default: {
+      printUsage();
+      process.exitCode = 1;
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error(error.stack || error.message || String(error));
+  process.exitCode = 1;
+});
