@@ -12,6 +12,14 @@
 
 Если ваша цель именно использовать `yt` из Codex, основной фокус должен быть на установке и конфигурации. Внутреннее устройство `api/` имеет смысл изучать только если вы собираетесь дорабатывать сам инструмент.
 
+Готовый skill для Codex лежит в репозитории здесь:
+
+```text
+skills-codex/yt
+```
+
+Отдельную корневую папку `yt/` в этом репозитории сделать нельзя, потому что имя `yt` уже занято исполняемым CLI-файлом в корне проекта.
+
 ## Быстрый старт
 
 Установка CLI:
@@ -45,15 +53,15 @@ yt config resolved
 Установка skill в Codex:
 
 ```bash
-mkdir -p ~/.codex/skills/yt
-cp /opt/homebrew/opt/yt/libexec/skills-codex/yt/SKILL.md ~/.codex/skills/yt/SKILL.md
+mkdir -p ~/.codex/skills
+cp -R /opt/homebrew/opt/yt/libexec/skills-codex/yt ~/.codex/skills/yt
 ```
 
 Если вы работаете не из `brew`, можно взять skill прямо из репозитория:
 
 ```bash
-mkdir -p ~/.codex/skills/yt
-cp skills-codex/yt/SKILL.md ~/.codex/skills/yt/SKILL.md
+mkdir -p ~/.codex/skills
+cp -R skills-codex/yt ~/.codex/skills/yt
 ```
 
 После этого Codex сможет использовать `yt` как специализированный skill для работы с TailDay YouTrack.
@@ -72,6 +80,8 @@ Standalone TailDay YouTrack CLI distributed as the `yt` command.
 ├── yt_params_schema.js
 └── README.md
 ```
+
+Здесь `yt` в корне это исполняемый CLI-файл, а Codex skill лежит в `skills-codex/yt`.
 
 ## Setup
 
@@ -183,7 +193,12 @@ cd yt
 skills-codex/yt/SKILL.md
 ```
 
-Если вы хотите, чтобы агент автоматически подхватывал этот workflow, установите этот файл в `~/.codex/skills/yt/SKILL.md`.
+Если вы хотите, чтобы агент автоматически подхватывал этот workflow, проще копировать сразу всю папку:
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R skills-codex/yt ~/.codex/skills/yt
+```
 
 ## Architecture
 
