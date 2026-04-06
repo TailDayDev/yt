@@ -3,11 +3,21 @@
 
 const packageJson = require('./package.json');
 const { createYouTrackApi } = require('./api');
+const {
+  CONFIG_PATH,
+  readUserConfig,
+  resolveConfig,
+  setUserConfigValue,
+  unsetUserConfig,
+  updateUserConfig,
+} = require('./config');
 const { formatTree } = require('./api/utils');
 const { runTailday802Scenario } = require('./tests/scenario');
 
 function printUsage() {
   console.error(`Usage:
+  yt [--token VALUE] [--base-url URL] [--project NAME] [--log-level LEVEL] [--timeout-ms N] [--max-retries N] <command>
+
   yt get ISSUE [--full]
   yt subtasks ISSUE
   yt create-subtask ISSUE --summary "Title" --description "Body"
@@ -15,6 +25,12 @@ function printUsage() {
   yt comment ISSUE "Text"
   yt search "QUERY"
   yt scenario ISSUE [--cleanup]
+  yt config path
+  yt config list
+  yt config get KEY
+  yt config set KEY VALUE
+  yt config unset KEY
+  yt config init [--token VALUE] [--base-url URL] [--project NAME] [--log-level LEVEL] [--timeout-ms N] [--max-retries N]
   yt version
 
   Articles (Knowledge Base):
@@ -28,7 +44,15 @@ function printUsage() {
   Child Articles:
   yt child-articles ARTICLE_ID
   yt create-child-article ARTICLE_ID --summary "Title" [--content "Body"] [--tag "name"]
-  yt link-child-article PARENT_ID CHILD_ID`);
+  yt link-child-article PARENT_ID CHILD_ID
+
+Config keys:
+  token
+  base-url
+  project
+  log-level
+  timeout-ms
+  max-retries`);
 }
 
 function readFlag(args, flagName) {
@@ -50,8 +74,257 @@ function readAllFlags(args, flagName) {
   return values;
 }
 
+function redactToken(token) {
+  const value = String(token || '').trim();
+
+  if (!value) {
+    return null;
+  }
+
+  if (value.length <= 8) {
+    return '********';
+  }
+
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function printJson(payload) {
+  console.log(JSON.stringify(payload, null, 2));
+}
+
+function formatResolvedConfig(config) {
+  return {
+    baseUrl: config.baseUrl,
+    configPath: CONFIG_PATH,
+    logLevel: config.logLevel,
+    maxRetries: config.maxRetries,
+    projectName: config.projectName,
+    timeoutMs: config.timeoutMs,
+    token: redactToken(config.token),
+  };
+}
+
+function formatStoredConfig(config) {
+  return {
+    baseUrl: config.baseUrl || null,
+    configPath: CONFIG_PATH,
+    logLevel: config.logLevel || null,
+    maxRetries: config.maxRetries ?? null,
+    projectName: config.projectName || null,
+    timeoutMs: config.timeoutMs ?? null,
+    token: redactToken(config.token),
+  };
+}
+
+function extractGlobalOverrides(argv) {
+  const args = [];
+  const overrides = {};
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+
+    if (value === '--token' && argv[index + 1]) {
+      overrides.YOUTRACK_BEARER_TOKEN = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === '--base-url' && argv[index + 1]) {
+      overrides.YOUTRACK_BASE_URL = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === '--project' && argv[index + 1]) {
+      overrides.YOUTRACK_PROJECT = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === '--log-level' && argv[index + 1]) {
+      overrides.YOUTRACK_LOG_LEVEL = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === '--timeout-ms' && argv[index + 1]) {
+      overrides.YOUTRACK_TIMEOUT_MS = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (value === '--max-retries' && argv[index + 1]) {
+      overrides.YOUTRACK_MAX_RETRIES = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    args.push(value);
+  }
+
+  return {
+    args,
+    overrides,
+  };
+}
+
+function createApi(overrides) {
+  return createYouTrackApi(overrides);
+}
+
+function readConfigInitArgs(args) {
+  const next = {};
+  const token = readFlag(args, '--token');
+  const baseUrl = readFlag(args, '--base-url');
+  const project = readFlag(args, '--project');
+  const logLevel = readFlag(args, '--log-level');
+  const timeoutMs = readFlag(args, '--timeout-ms');
+  const maxRetries = readFlag(args, '--max-retries');
+
+  if (token) {
+    next.token = token;
+  }
+
+  if (baseUrl) {
+    next.baseUrl = baseUrl;
+  }
+
+  if (project) {
+    next.projectName = project;
+  }
+
+  if (logLevel) {
+    next.logLevel = logLevel;
+  }
+
+  if (timeoutMs) {
+    next.timeoutMs = timeoutMs;
+  }
+
+  if (maxRetries) {
+    next.maxRetries = maxRetries;
+  }
+
+  return next;
+}
+
+function handleConfigCommand(args, overrides) {
+  const subcommand = args[0] || 'list';
+
+  switch (subcommand) {
+    case 'path': {
+      console.log(CONFIG_PATH);
+      return;
+    }
+    case 'list': {
+      printJson(formatStoredConfig(readUserConfig()));
+      return;
+    }
+    case 'resolved': {
+      printJson(formatResolvedConfig(resolveConfig(overrides)));
+      return;
+    }
+    case 'get': {
+      const key = args[1];
+
+      if (!key) {
+        throw new Error('config get requires a KEY argument.');
+      }
+
+      const stored = readUserConfig();
+      const normalized = {
+        'base-url': stored.baseUrl || null,
+        'log-level': stored.logLevel || null,
+        'max-retries': stored.maxRetries ?? null,
+        project: stored.projectName || null,
+        'timeout-ms': stored.timeoutMs ?? null,
+        token: redactToken(stored.token),
+      };
+
+      if (!(key in normalized)) {
+        throw new Error(`Unknown config key "${key}".`);
+      }
+
+      const value = normalized[key];
+      if (value == null) {
+        process.exitCode = 1;
+        return;
+      }
+
+      if (typeof value === 'object') {
+        printJson(value);
+        return;
+      }
+
+      console.log(String(value));
+      return;
+    }
+    case 'set': {
+      const key = args[1];
+      const value = args[2];
+
+      if (!key || value == null) {
+        throw new Error('config set requires KEY and VALUE arguments.');
+      }
+
+      const updated = setUserConfigValue(key, value);
+      printJson(formatStoredConfig(updated));
+      return;
+    }
+    case 'unset': {
+      const key = args[1];
+
+      if (!key) {
+        throw new Error('config unset requires a KEY argument.');
+      }
+
+      const updated = unsetUserConfig(key);
+      printJson(formatStoredConfig(updated));
+      return;
+    }
+    case 'init': {
+      const updates = {
+        ...readConfigInitArgs(args.slice(1)),
+      };
+
+      if (overrides.YOUTRACK_BEARER_TOKEN) {
+        updates.token = overrides.YOUTRACK_BEARER_TOKEN;
+      }
+
+      if (overrides.YOUTRACK_BASE_URL) {
+        updates.baseUrl = overrides.YOUTRACK_BASE_URL;
+      }
+
+      if (overrides.YOUTRACK_PROJECT) {
+        updates.projectName = overrides.YOUTRACK_PROJECT;
+      }
+
+      if (overrides.YOUTRACK_LOG_LEVEL) {
+        updates.logLevel = overrides.YOUTRACK_LOG_LEVEL;
+      }
+
+      if (overrides.YOUTRACK_TIMEOUT_MS) {
+        updates.timeoutMs = overrides.YOUTRACK_TIMEOUT_MS;
+      }
+
+      if (overrides.YOUTRACK_MAX_RETRIES) {
+        updates.maxRetries = overrides.YOUTRACK_MAX_RETRIES;
+      }
+
+      const updated = updateUserConfig(updates);
+      printJson(formatStoredConfig(updated));
+      return;
+    }
+    default: {
+      throw new Error(`Unknown config command "${subcommand}".`);
+    }
+  }
+}
+
 async function main() {
-  const [, , command, ...args] = process.argv;
+  const { args: argv, overrides } = extractGlobalOverrides(process.argv.slice(2));
+  const [command, ...args] = argv;
+
   if (!command) {
     printUsage();
     process.exitCode = 1;
@@ -71,22 +344,26 @@ async function main() {
       printUsage();
       return;
     }
+    case 'config': {
+      handleConfigCommand(args, overrides);
+      return;
+    }
     case 'get': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const full = args.includes('--full');
       const issueId = args.find((a) => !a.startsWith('--'));
-      console.log(JSON.stringify(await api.getIssue(issueId, { full }), null, 2));
+      printJson(await api.getIssue(issueId, { full }));
       return;
     }
     case 'subtasks': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const result = await api.listSubtasks(args[0]);
       console.log(formatTree(result.subtasks, 0) || '(no subtasks)');
-      console.log(JSON.stringify(result, null, 2));
+      printJson(result);
       return;
     }
     case 'create-subtask': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const issueId = args[0];
       const summary = readFlag(args, '--summary');
       const description = readFlag(args, '--description');
@@ -105,11 +382,11 @@ async function main() {
         status,
         summary,
       });
-      console.log(JSON.stringify(created, null, 2));
+      printJson(created);
       return;
     }
     case 'status': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const issueId = args[0];
       const nextStatus = args.slice(1).join(' ').trim();
 
@@ -119,47 +396,45 @@ async function main() {
         return;
       }
 
-      console.log(JSON.stringify(await api.updateStatus(issueId, nextStatus), null, 2));
+      printJson(await api.updateStatus(issueId, nextStatus));
       return;
     }
     case 'comment': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const issueId = args[0];
       const text = args.slice(1).join(' ').trim();
-      console.log(JSON.stringify(await api.addComment(issueId, text), null, 2));
+      printJson(await api.addComment(issueId, text));
       return;
     }
     case 'search': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const query = args.join(' ').trim();
-      console.log(JSON.stringify(await api.searchIssues(query), null, 2));
+      printJson(await api.searchIssues(query));
       return;
     }
     case 'scenario': {
       const issueId = args[0] || 'TAILDAY-802';
       const cleanup = args.includes('--cleanup');
-      console.log(
-        JSON.stringify(await runTailday802Scenario({ cleanup, issueId }), null, 2),
-      );
+      printJson(await runTailday802Scenario({ ...overrides, cleanup, issueId }));
       return;
     }
     case 'article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const articleId = args[0];
       if (!articleId) {
         throw new Error('article requires an ARTICLE_ID argument.');
       }
-      console.log(JSON.stringify(await api.getArticle(articleId), null, 2));
+      printJson(await api.getArticle(articleId));
       return;
     }
     case 'articles': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const articles = await api.listArticles();
-      console.log(JSON.stringify(articles, null, 2));
+      printJson(articles);
       return;
     }
     case 'create-article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const summary = readFlag(args, '--summary');
       const content = readFlag(args, '--content');
       const project = readFlag(args, '--project');
@@ -175,11 +450,11 @@ async function main() {
         summary,
         tags: tags.length ? tags : undefined,
       });
-      console.log(JSON.stringify(created, null, 2));
+      printJson(created);
       return;
     }
     case 'update-article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const articleId = args[0];
       if (!articleId) {
         throw new Error('update-article requires an ARTICLE_ID argument.');
@@ -192,11 +467,11 @@ async function main() {
         content,
         summary,
       });
-      console.log(JSON.stringify(updated, null, 2));
+      printJson(updated);
       return;
     }
     case 'tag-article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const articleId = args[0];
       if (!articleId) {
         throw new Error('tag-article requires an ARTICLE_ID argument.');
@@ -208,33 +483,33 @@ async function main() {
       }
 
       const results = await api.tagArticle(articleId, tagNames);
-      console.log(JSON.stringify(results, null, 2));
+      printJson(results);
       return;
     }
     case 'delete-article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const articleId = args[0];
       if (!articleId) {
         throw new Error('delete-article requires an ARTICLE_ID argument.');
       }
 
       const result = await api.deleteArticle(articleId);
-      console.log(JSON.stringify(result, null, 2));
+      printJson(result);
       return;
     }
     case 'child-articles': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const articleId = args[0];
       if (!articleId) {
         throw new Error('child-articles requires an ARTICLE_ID argument.');
       }
 
       const children = await api.listChildArticles(articleId);
-      console.log(JSON.stringify(children, null, 2));
+      printJson(children);
       return;
     }
     case 'create-child-article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const parentId = args[0];
       if (!parentId) {
         throw new Error('create-child-article requires a parent ARTICLE_ID argument.');
@@ -255,11 +530,11 @@ async function main() {
         summary,
         tags: tags.length ? tags : undefined,
       });
-      console.log(JSON.stringify(created, null, 2));
+      printJson(created);
       return;
     }
     case 'link-child-article': {
-      const api = createYouTrackApi();
+      const api = createApi(overrides);
       const parentId = args[0];
       const childId = args[1];
       if (!parentId || !childId) {
@@ -267,7 +542,7 @@ async function main() {
       }
 
       const linked = await api.linkChildArticle(parentId, childId);
-      console.log(JSON.stringify(linked, null, 2));
+      printJson(linked);
       return;
     }
     default: {

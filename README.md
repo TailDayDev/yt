@@ -24,6 +24,15 @@ Standalone TailDay YouTrack CLI distributed as the `yt` command.
    - `YOUTRACK_TIMEOUT_MS=20000`
    - `YOUTRACK_MAX_RETRIES=4`
 
+Persistent CLI config:
+
+```bash
+yt config set token "perm-..."
+yt config set base-url "https://underogat.youtrack.cloud"
+yt config set project "TailDay"
+yt config list
+```
+
 Example:
 
 ```bash
@@ -41,8 +50,10 @@ brew install TailDayDev/tap/yt
 ## Auth
 
 - Transport uses `Authorization: Bearer <token>`.
-- `YOUTRACK_BEARER_TOKEN` is read from env first, then `YT_BEARER_TOKEN`.
-- The base URL is read from env first and falls back to `config/index.js`.
+- Precedence is: command flags -> shell env -> user config file -> defaults.
+- `YOUTRACK_BEARER_TOKEN` is read from env first, then `YT_BEARER_TOKEN`, then `yt config` storage.
+- The base URL is read from env first and then falls back to `yt config` or `config/index.js`.
+- User config is stored at `~/.config/tailday/yt.json` unless `XDG_CONFIG_HOME` is set.
 
 ## Commands
 
@@ -57,6 +68,26 @@ yt status ISSUE "In Progress"
 yt comment ISSUE "Text"
 yt search "project: TailDay #Unresolved"
 yt scenario TAILDAY-802
+```
+
+Global overrides:
+
+```bash
+yt --token "perm-..." --base-url "https://underogat.youtrack.cloud" get TAILDAY-802
+yt --project TailDay --timeout-ms 30000 search "#Unresolved"
+```
+
+Config commands:
+
+```bash
+yt config path
+yt config list
+yt config resolved
+yt config get token
+yt config set token "perm-..."
+yt config set base-url "https://underogat.youtrack.cloud"
+yt config unset token
+yt config init --token "perm-..." --base-url "https://underogat.youtrack.cloud" --project TailDay
 ```
 
 Command notes:
