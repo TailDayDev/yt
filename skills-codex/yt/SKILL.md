@@ -7,6 +7,8 @@ description: Use this skill when an agent needs to operate TailDay YouTrack issu
 
 Operate the existing TailDay YouTrack integration through the published `yt` CLI. Do not redesign the integration unless the user explicitly asks for changes in the CLI or API itself.
 
+This skill assumes the `yt` binary is already installed and available in `PATH`. Preferred installation path is Homebrew: `brew install TailDayDev/tap/yt`.
+
 ## Use This Skill When
 
 - You need to read a TailDay issue, subtask tree, or issue metadata.

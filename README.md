@@ -1,5 +1,50 @@
 # TailDay YouTrack CLI
 
+## Для чего это
+
+`yt` это CLI для работы с TailDay YouTrack и базой знаний. Инструмент в первую очередь сделан для ИИ-агентов, которые должны безопасно и предсказуемо читать задачи, строить дерево подзадач, менять статусы, оставлять комментарии, искать задачи и работать со статьями knowledge base.
+
+Обычному пользователю не нужно глубоко разбираться в том, как внутри устроен API-слой. Практически все, что важно для запуска, это:
+
+1. установить CLI;
+2. настроить доступ к YouTrack;
+3. установить Codex skill для этого инструмента.
+
+Если ваша цель именно использовать `yt` из Codex, основной фокус должен быть на установке и конфигурации. Внутреннее устройство `api/` имеет смысл изучать только если вы собираетесь дорабатывать сам инструмент.
+
+## Быстрый старт
+
+Установка CLI:
+
+```bash
+brew install TailDayDev/tap/yt
+```
+
+Настройка доступа:
+
+```bash
+yt config set token "perm-..."
+yt config set base-url "https://underogat.youtrack.cloud"
+yt config set project "TailDay"
+yt config resolved
+```
+
+Установка skill в Codex:
+
+```bash
+mkdir -p ~/.codex/skills/yt
+cp /opt/homebrew/opt/yt/libexec/skills-codex/yt/SKILL.md ~/.codex/skills/yt/SKILL.md
+```
+
+Если вы работаете не из `brew`, можно взять skill прямо из репозитория:
+
+```bash
+mkdir -p ~/.codex/skills/yt
+cp skills-codex/yt/SKILL.md ~/.codex/skills/yt/SKILL.md
+```
+
+После этого Codex сможет использовать `yt` как специализированный skill для работы с TailDay YouTrack.
+
 Standalone TailDay YouTrack CLI distributed as the `yt` command.
 
 ## Structure
@@ -9,7 +54,7 @@ Standalone TailDay YouTrack CLI distributed as the `yt` command.
 ├── yt
 ├── api
 ├── config
-├── skill
+├── skills-codex
 ├── tests
 ├── yt_params_schema.js
 └── README.md
@@ -117,6 +162,16 @@ cd yt
 ./yt help
 ```
 
+## Codex Skill
+
+В репозитории skill лежит в Codex-совместимом виде:
+
+```text
+skills-codex/yt/SKILL.md
+```
+
+Если вы хотите, чтобы агент автоматически подхватывал этот workflow, установите этот файл в `~/.codex/skills/yt/SKILL.md`.
+
 ## Architecture
 
 - `config` resolves env, token, and runtime defaults.
@@ -193,4 +248,4 @@ Add new adapters around those factories instead of rewriting the API layer.
 
 ## Skill Integration Guide
 
-`skill/YT.skill.md` defines the local `YT` skill. Use it when a Codex agent should manipulate issues, inspect hierarchies, or run regression-style task orchestration against YouTrack.
+`skills-codex/yt/SKILL.md` defines the Codex skill for this CLI. Use it when a Codex agent should manipulate issues, inspect hierarchies, work with knowledge base articles, or run regression-style task orchestration against YouTrack.

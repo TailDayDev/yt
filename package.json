@@ -1,6 +1,6 @@
 {
   "name": "@tailday/yt",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TailDay YouTrack CLI",
   "private": false,
   "bin": {
@@ -9,7 +9,7 @@
   "files": [
     "api",
     "config",
-    "skill",
+    "skills-codex",
     "tests",
     "yt",
     "yt_params_schema.js",
