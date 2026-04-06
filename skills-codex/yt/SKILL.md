@@ -29,6 +29,28 @@ This skill assumes the `yt` binary is already installed and available in `PATH`.
 5. Do not invent custom-field names. Read them from `yt_params_schema.js`.
 6. Do not assume generic YouTrack statuses map 1:1 to TailDay statuses.
 7. If a task mutates live data for verification, clean up disposable artifacts unless the user explicitly asks to keep them.
+8. For every new issue or subtask title, use a department prefix to make ownership explicit.
+
+## Department Prefix Rule (Issue Titles)
+
+When creating issues/subtasks, always prepend the title with a short department code and a colon.
+
+Format:
+
+`<DEPT>: <short task title>`
+
+Examples:
+
+- `FE: Fix additional services flow on pet screen`
+- `BE: Add endpoint for service availability`
+- `QA: Regression pass for manual booking`
+- `DSG: Update service card spacing and typography`
+
+Allowed department codes include but are not limited to:
+
+- `FE`, `BE`, `QA`, `DSG`, `DEVOPS`, `PM`, `ANALYTICS`, `MOBILE`
+
+If the department is not explicitly provided by the user, infer it from context. If context is ambiguous, ask a short clarifying question before creating the issue.
 
 ## TailDay-Specific Facts
 
