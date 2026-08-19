@@ -9,11 +9,13 @@ const YT_PROJECT_SCHEMA = {
     estimate: 'Оценка',
     timeSpent: 'Затраченное время',
     assignee: 'Assignee',
+    type: 'Type',
   },
 
   defaults: {
     status: 'Backlog',
     priority: 'Normal',
+    type: 'Task',
   },
 };
 
@@ -41,6 +43,10 @@ const YT_TASK_PARAMS_SCHEMA_NEEDED = {
     Stage: {
       name: 'Backlog',
       $type: 'StateBundleElement',
+    },
+    Type: {
+      name: 'Task',
+      $type: 'EnumBundleElement',
     },
     'Оценка': null,
     'Затраченное время': null,

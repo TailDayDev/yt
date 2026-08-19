@@ -1,6 +1,6 @@
 ---
 name: YT
-description: Use this skill when an agent needs to operate TailDay YouTrack issues or knowledge base articles through the standalone `yt` CLI or its local API wrapper.
+description: Use this skill when an agent needs to operate TailDay YouTrack issues or knowledge base articles through the standalone `yt` CLI or its local API wrapper. Triggers include YouTrack, TailDay issues, create task, create subtask, bug ticket, yt CLI, KB articles.
 ---
 
 # YT
@@ -12,6 +12,7 @@ This skill assumes the `yt` binary is already installed and available in `PATH`.
 ## Use This Skill When
 
 - You need to read a TailDay issue, subtask tree, or issue metadata.
+- You need to create a top-level task or a bug.
 - You need to create a subtask under an existing issue.
 - You need to move an issue through statuses.
 - You need to add a comment to an issue.
@@ -30,6 +31,8 @@ This skill assumes the `yt` binary is already installed and available in `PATH`.
 6. Do not assume generic YouTrack statuses map 1:1 to TailDay statuses.
 7. If a task mutates live data for verification, clean up disposable artifacts unless the user explicitly asks to keep them.
 8. For every new issue or subtask title, use a department prefix to make ownership explicit.
+9. Create issues with a preset. Default is `--preset me`.
+10. Do not change Assignee unless the user explicitly asks to reassign or unassign.
 
 ## Department Prefix Rule (Issue Titles)
 
@@ -57,11 +60,31 @@ If the department is not explicitly provided by the user, infer it from context.
 - Project name: `TailDay`
 - Status field name: `Stage`
 - Priority field name: `Priority`
+- Type field name: `Type`
 - Estimate field name: `Оценка`
 - Time spent field name: `Затраченное время`
 - Assignee field name: `Assignee`
 
+Type values include `Task`, `Bug`, `Feature`, `Epic`, `Cosmetics`, `Exception`, `Usability Problem`, `Performance Problem`.
+
 The TailDay project uses real stage values from YouTrack. Requested statuses are resolved against the actual bundle. For example, `Open` currently resolves to `Backlog`.
+
+## Create Presets
+
+`yt presets` prints the built-in create presets.
+
+| Preset | Type | Assignee | Stage | Priority |
+| --- | --- | --- | --- | --- |
+| `me` | Task | current YouTrack user | Backlog | Normal |
+| `task` | Task | current YouTrack user | Backlog | Normal |
+| `bug` | Bug | current YouTrack user | Backlog | Normal |
+
+Rules:
+
+- Default preset is `me`.
+- Bugs stay assigned to the current user.
+- Do not pass `--assignee` or `--unassigned` unless the user asked to change ownership.
+- `--type`, `--priority`, `--status`, and `--assignee` override the preset.
 
 ## Configuration
 
@@ -100,7 +123,7 @@ Resolution precedence is:
 
 1. Read the issue first.
 2. Read the current subtask tree if hierarchy matters.
-3. If creating a subtask or article, use the existing schema and API helpers instead of hand-building payloads.
+3. If creating a task, bug, subtask, or article, use the existing schema, presets, and API helpers instead of hand-building payloads.
 4. If changing status, verify the current state and apply transitions through the CLI or API.
 5. If running verification against live YouTrack, prefer disposable entities and clean them up after the check.
 
@@ -110,7 +133,11 @@ Resolution precedence is:
 yt get ISSUE
 yt get ISSUE --full
 yt subtasks ISSUE
-yt create-subtask ISSUE --summary "Title" --description "Body"
+yt presets
+yt create-task --summary "Title" --preset me
+yt create-task --summary "Title" --preset bug
+yt create-task --summary "Title" --preset task --description "Body"
+yt create-subtask ISSUE --summary "Title" --preset me --description "Body"
 yt status ISSUE
 yt status ISSUE "In Progress"
 yt comment ISSUE "Text"
@@ -118,7 +145,7 @@ yt search "project: TailDay #Unresolved"
 yt scenario TAILDAY-802 --cleanup
 ```
 
-By default `yt get` returns a short normalized payload. Pass `--full` when status, assignee, comments, custom fields, or hierarchy data matter.
+By default `yt get` returns a short normalized payload. Pass `--full` when status, assignee, type, comments, custom fields, or hierarchy data matter.
 
 ## Article Commands
 
@@ -158,6 +185,7 @@ yt config init --token "perm-..." --base-url "https://underogat.youtrack.cloud" 
 
 - `api/index.js`
 - `api/youtrack-api.js`
+- `api/presets.js`
 - `tests/scenario.js`
 
 Use the API wrapper when the agent needs:
@@ -165,6 +193,7 @@ Use the API wrapper when the agent needs:
 - retries and normalized errors
 - cleanup on failure
 - status alias resolution
+- create presets
 - multi-step automation
 - article workflows
 - tag resolution and creation
@@ -173,15 +202,20 @@ Use the API wrapper when the agent needs:
 
 - Prefer direct terminal commands for one-off issue operations.
 - Prefer direct terminal commands for one-off article operations as well.
+- Prefer `create-task` for a standalone issue and `create-subtask` only when a parent issue is known.
+- Prefer `--preset bug` for bugs and `--preset me` for ordinary work.
+- Never unassign or reassign a created issue unless the user asked for that.
 - Prefer the scenario runner for validating the full integration path.
-- Report exact issue IDs, article IDs, and exact status values after mutation.
+- Report exact issue IDs, article IDs, Type, Assignee, and exact status values after mutation.
 - When auth/config is missing, tell the user which config key is needed instead of guessing.
 - If a live operation fails, surface the normalized error instead of guessing.
 - If a temporary issue, subtask, or article was created for testing, remove it unless the user asked to keep it.
 
 ## Example Tasks
 
-- Read `TAILDAY-<number>`, summarize status and assignee, and list all subtasks.
+- Read `TAILDAY-<number>`, summarize status, type, and assignee, and list all subtasks.
+- Create a disposable task with `--preset me`, verify it is assigned to the current user, then clean it up.
+- Create a disposable bug with `--preset bug`, verify Type is Bug and assignee did not change, then clean it up.
 - Create a disposable subtask under `TAILDAY-<number>`, move it through the test flow, add a comment, and clean it up.
 - Search for all unresolved TailDay issues assigned to a specific user.
 - Audit a parent issue hierarchy before creating a release checklist.

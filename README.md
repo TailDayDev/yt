@@ -50,18 +50,22 @@ yt config set project "TailDay"
 yt config resolved
 ```
 
-Установка skill в Codex:
+Установка skill в Codex, Grok и Claude:
 
 ```bash
-mkdir -p ~/.codex/skills
+mkdir -p ~/.codex/skills ~/.grok/skills ~/.claude/skills
 cp -R /opt/homebrew/opt/yt/libexec/skills-codex/yt ~/.codex/skills/yt
+cp -R /opt/homebrew/opt/yt/libexec/skills-codex/yt ~/.grok/skills/yt
+cp -R /opt/homebrew/opt/yt/libexec/skills-codex/yt ~/.claude/skills/yt
 ```
 
 Если вы работаете не из `brew`, можно взять skill прямо из репозитория:
 
 ```bash
-mkdir -p ~/.codex/skills
+mkdir -p ~/.codex/skills ~/.grok/skills ~/.claude/skills
 cp -R skills-codex/yt ~/.codex/skills/yt
+cp -R skills-codex/yt ~/.grok/skills/yt
+cp -R skills-codex/yt ~/.claude/skills/yt
 ```
 
 После этого Codex сможет использовать `yt` как специализированный skill для работы с TailDay YouTrack.
@@ -130,7 +134,10 @@ Primary entrypoint:
 ```bash
 yt get ISSUE
 yt subtasks ISSUE
+yt create-task --summary "Title" --preset me
+yt create-task --summary "Title" --preset bug
 yt create-subtask ISSUE --summary "Title" --description "Body"
+yt presets
 yt status ISSUE
 yt status ISSUE "In Progress"
 yt comment ISSUE "Text"
@@ -162,7 +169,9 @@ Command notes:
 
 - `get` prints a normalized issue payload.
 - `subtasks` prints the subtask tree and the raw normalized structure.
-- `create-subtask` creates a new issue in `TailDay`, applies default custom fields, then links it as a subtask.
+- `create-task` creates a top-level TailDay issue. Default preset is `me`.
+- `create-subtask` creates a new issue in `TailDay`, applies the same presets/defaults, then links it as a subtask.
+- `presets` prints built-in create presets (`me`, `task`, `bug`).
 - `status` without a second argument reads the current status. With a second argument it updates the status.
 - `comment` adds a plain-text comment.
 - `search` runs a YouTrack query and returns normalized issues.
@@ -196,8 +205,10 @@ skills-codex/yt/SKILL.md
 Если вы хотите, чтобы агент автоматически подхватывал этот workflow, проще копировать сразу всю папку:
 
 ```bash
-mkdir -p ~/.codex/skills
+mkdir -p ~/.codex/skills ~/.grok/skills ~/.claude/skills
 cp -R skills-codex/yt ~/.codex/skills/yt
+cp -R skills-codex/yt ~/.grok/skills/yt
+cp -R skills-codex/yt ~/.claude/skills/yt
 ```
 
 ## Architecture
@@ -207,10 +218,27 @@ cp -R skills-codex/yt ~/.codex/skills/yt
 - `api/youtrack-api.js` exposes the main wrapper functions:
   - `getIssue`
   - `listSubtasks`
+  - `createIssue`
   - `createSubtask`
   - `updateStatus`
   - `addComment`
   - `searchIssues`
+- `api/presets.js` owns create presets (`me`, `task`, `bug`).
+
+Create presets:
+
+- `me` / `task` — Type `Task`, Stage `Backlog`, Priority `Normal`, Assignee = current YouTrack user.
+- `bug` — same fields, Type `Bug`, still assigned to the current user.
+- Assignee is never cleared unless you pass `--unassigned` or `--assignee`.
+- `--type`, `--priority`, `--status`, and `--assignee` override the preset.
+
+Example:
+
+```bash
+yt create-task --summary "FE: Fix booking card padding" --preset me
+yt create-task --summary "FE: Android tap target too small" --preset bug
+yt create-subtask TAILDAY-802 --summary "FE: Cover empty state" --preset task
+```
 - `api/types.d.ts` provides typed response contracts for editor and TypeScript consumers.
 - `yt_params_schema.js` is the local TailDay schema source.
 
@@ -237,6 +265,10 @@ yt scenario TAILDAY-802 --cleanup
 ```
 
 ## Automated Tests
+
+`npm test` runs local unit tests for presets and create-field payloads.
+
+Live create tests (`tests/create.live.test.js`) run only when `YOUTRACK_RUN_LIVE_TESTS=1` is set. They create disposable issues, check Type/Assignee, then delete them.
 
 `tests/yt.integration.test.js` runs a live integration sequence and verifies:
 

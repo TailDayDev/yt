@@ -13,6 +13,7 @@ const {
   normalizeIssue,
 } = require('./utils');
 const { createExtensionHooks } = require('./hooks');
+const { applyPreset, listPresets } = require('./presets');
 
 function createYouTrackApi(overrides) {
   const config = assertConfig(resolveConfig(overrides));
@@ -21,6 +22,7 @@ function createYouTrackApi(overrides) {
   const projectCache = new Map();
   const projectCustomFieldCache = new Map();
   let tagCache = null;
+  let currentUserCache = null;
 
   function normalizeLookupValue(value) {
     return String(value || '')
@@ -138,8 +140,33 @@ function createYouTrackApi(overrides) {
     return normalizeIssue(rawIssue);
   }
 
+  async function getIssueFull(issueId) {
+    return getIssue(issueId, { full: true });
+  }
+
+  async function getCurrentUser() {
+    if (currentUserCache) {
+      return currentUserCache;
+    }
+
+    currentUserCache = await http.request({
+      method: 'GET',
+      params: { fields: 'id,login,name,fullName' },
+      url: '/users/me',
+    });
+    return currentUserCache;
+  }
+
+  async function resolveCreateInput(input, defaultPreset) {
+    const currentUser = await getCurrentUser();
+    return applyPreset(input, {
+      currentUser,
+      defaultPreset: defaultPreset || 'me',
+    });
+  }
+
   async function buildSubtaskNode(issueId, depth) {
-    const issue = await getIssue(issueId);
+    const issue = await getIssueFull(issueId);
     if (depth <= 0) {
       return {
         children: [],
@@ -160,9 +187,11 @@ function createYouTrackApi(overrides) {
   async function listSubtasks(issueId, options) {
     const depth =
       typeof options?.depth === 'number' && options.depth >= 0 ? options.depth : 10;
-    const parentIssue = await getIssue(issueId);
+    const parentIssue = await getIssueFull(issueId);
     const subtasks = await Promise.all(
-      parentIssue.subtasks.map((subtask) => buildSubtaskNode(subtask.idReadable, depth - 1)),
+      (parentIssue.subtasks || []).map((subtask) =>
+        buildSubtaskNode(subtask.idReadable, depth - 1),
+      ),
     );
 
     return {
@@ -171,28 +200,40 @@ function createYouTrackApi(overrides) {
     };
   }
 
-  async function createSubtask(parentIssueId, input) {
+  async function createIssue(input) {
     if (!input || !input.summary) {
-      throw new Error('createSubtask requires a summary.');
+      throw new Error('createIssue requires a summary.');
     }
 
-    const projectName = input.projectName || YT_PROJECT_SCHEMA.project;
+    const payload = await resolveCreateInput(input, 'me');
+    const projectName = payload.projectName || YT_PROJECT_SCHEMA.project;
     const project = await getProject(projectName);
-    const customFields = buildCreateCustomFields(input);
+    const customFields = buildCreateCustomFields(payload);
 
     const created = await http.request({
       data: {
         customFields,
-        description: input.description || null,
+        description: payload.description || null,
         project: { id: project.id },
-        summary: input.summary,
+        summary: payload.summary,
       },
       method: 'POST',
       params: { fields: ISSUE_FIELDS },
       url: '/issues',
     });
 
-    const createdIssue = normalizeIssue(created);
+    return normalizeIssue(created);
+  }
+
+  async function createSubtask(parentIssueId, input) {
+    if (!parentIssueId) {
+      throw new Error('createSubtask requires a parent issue id.');
+    }
+    if (!input || !input.summary) {
+      throw new Error('createSubtask requires a summary.');
+    }
+
+    const createdIssue = await createIssue(input);
 
     await http.request({
       data: {
@@ -203,7 +244,7 @@ function createYouTrackApi(overrides) {
       url: '/commands',
     });
 
-    return getIssue(createdIssue.idReadable);
+    return getIssueFull(createdIssue.idReadable);
   }
 
   async function updateStatus(issueId, status) {
@@ -509,7 +550,10 @@ function createYouTrackApi(overrides) {
     createArticle,
     createChildArticle,
     createExtensionHooks,
+    createIssue,
     createSubtask,
+    getCurrentUser,
+    listPresets,
     deleteArticle,
     deleteIssue,
     getArticle,

@@ -171,6 +171,7 @@ function normalizeIssue(rawIssue) {
     reporter: rawIssue.reporter || null,
     resolved: rawIssue.resolved ?? null,
     status: getNamedField(fieldMap, fieldNames.status)?.name || null,
+    type: getNamedField(fieldMap, fieldNames.type)?.name || null,
     subtasks: toArray(rawIssue.subtasks?.issues).map(normalizeIssueSummary),
     summary: rawIssue.summary || null,
     timeSpent: fieldMap[fieldNames.timeSpent] ?? null,
@@ -181,7 +182,7 @@ function normalizeIssue(rawIssue) {
 function inferCustomFieldType(fieldName, value) {
   const fieldNames = getFieldNameMap();
 
-  if (fieldName === fieldNames.priority) {
+  if (fieldName === fieldNames.priority || fieldName === fieldNames.type) {
     return 'SingleEnumIssueCustomField';
   }
 
@@ -190,9 +191,7 @@ function inferCustomFieldType(fieldName, value) {
   }
 
   if (fieldName === fieldNames.assignee) {
-    return Array.isArray(value) && value.length > 1
-      ? 'MultiUserIssueCustomField'
-      : 'SingleUserIssueCustomField';
+    return 'MultiUserIssueCustomField';
   }
 
   if (fieldName === fieldNames.estimate || fieldName === fieldNames.timeSpent) {
@@ -234,43 +233,87 @@ function normalizeCreateValue(value) {
   return value;
 }
 
+function toAssigneeCreateValue(value) {
+  if (value == null) {
+    return [];
+  }
+
+  const users = Array.isArray(value) ? value : [value];
+  return users
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { login: entry };
+      }
+      if (entry && entry.login) {
+        return { login: entry.login };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
 function buildCreateCustomFields(input) {
+  const source = input && typeof input === 'object' ? input : {};
   const fieldNames = getFieldNameMap();
   const defaultTemplate = getDefaultTaskTemplate();
   const rawCustomFields = {
     ...(defaultTemplate.rawCustomFields || {}),
-    ...(input.rawCustomFields || {}),
+    ...(source.rawCustomFields || {}),
   };
 
-  const assigneeValue =
-    input.assignee == null ? null : input.assignee;
   const statusValue =
-    input.status == null
+    source.status == null
       ? rawCustomFields[fieldNames.status] ||
         defaultTemplate.rawCustomFields[fieldNames.status]
-      : { name: input.status };
+      : { name: source.status };
   const priorityValue =
-    input.priority == null
+    source.priority == null
       ? rawCustomFields[fieldNames.priority] ||
         defaultTemplate.rawCustomFields.Priority
-      : { name: input.priority };
+      : { name: source.priority };
+  const typeValue =
+    source.type == null
+      ? rawCustomFields[fieldNames.type] ||
+        defaultTemplate.rawCustomFields.Type
+      : { name: source.type };
+
+  let assigneeValue;
+  if (Object.prototype.hasOwnProperty.call(source, 'assignee')) {
+    assigneeValue = source.assignee;
+  } else if (Object.prototype.hasOwnProperty.call(rawCustomFields, fieldNames.assignee)) {
+    assigneeValue = rawCustomFields[fieldNames.assignee];
+  } else {
+    assigneeValue = defaultTemplate.rawCustomFields[fieldNames.assignee];
+  }
 
   const merged = {
     ...rawCustomFields,
-    [fieldNames.assignee]: assigneeValue,
     [fieldNames.priority]: priorityValue,
     [fieldNames.status]: statusValue,
+    [fieldNames.type]: typeValue,
   };
+
+  if (assigneeValue == null) {
+    merged[fieldNames.assignee] = [];
+  } else {
+    merged[fieldNames.assignee] = assigneeValue;
+  }
 
   return Object.entries(merged).reduce((accumulator, [fieldName, value]) => {
     if (value == null) {
       return accumulator;
     }
 
+    const fieldType = inferCustomFieldType(fieldName, value);
+    const normalizedValue =
+      fieldName === fieldNames.assignee
+        ? toAssigneeCreateValue(value)
+        : normalizeCreateValue(value);
+
     accumulator.push({
-      $type: inferCustomFieldType(fieldName, value),
+      $type: fieldType,
       name: fieldName,
-      value: normalizeCreateValue(value),
+      value: normalizedValue,
     });
     return accumulator;
   }, []);
@@ -325,7 +368,9 @@ module.exports = {
   formatTree,
   getDefaultTaskTemplate,
   getFieldNameMap,
+  inferCustomFieldType,
   normalizeArticle,
   normalizeIssue,
   normalizeIssueSummary,
+  toAssigneeCreateValue,
 };

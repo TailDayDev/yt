@@ -1,6 +1,6 @@
 {
   "name": "@tailday/yt",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "TailDay YouTrack CLI",
   "private": false,
   "bin": {
@@ -20,5 +20,8 @@
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20 <23"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
   }
 }

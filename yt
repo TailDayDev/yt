@@ -20,7 +20,9 @@ function printUsage() {
 
   yt get ISSUE [--full]
   yt subtasks ISSUE
-  yt create-subtask ISSUE --summary "Title" --description "Body"
+  yt create-task --summary "Title" [--preset me|task|bug] [--type TYPE] [--assignee LOGIN] [--unassigned] [--priority P] [--status S] [--description "Body"]
+  yt create-subtask ISSUE --summary "Title" [--preset me|task|bug] [--type TYPE] [--assignee LOGIN] [--unassigned] [--priority P] [--status S] [--description "Body"]
+  yt presets
   yt status ISSUE [STATUS]
   yt comment ISSUE "Text"
   yt search "QUERY"
@@ -170,6 +172,37 @@ function extractGlobalOverrides(argv) {
 
 function createApi(overrides) {
   return createYouTrackApi(overrides);
+}
+
+function readCreateIssueArgs(args) {
+  const summary = readFlag(args, '--summary');
+  const description = readFlag(args, '--description');
+  const priority = readFlag(args, '--priority');
+  const status = readFlag(args, '--status');
+  const assignee = readFlag(args, '--assignee');
+  const type = readFlag(args, '--type');
+  const preset = readFlag(args, '--preset');
+  const project = readFlag(args, '--project');
+  const unassigned = args.includes('--unassigned');
+
+  const input = {
+    description,
+    preset: preset || undefined,
+    priority: priority || undefined,
+    projectName: project || undefined,
+    status: status || undefined,
+    summary,
+    type: type || undefined,
+  };
+
+  if (unassigned) {
+    input.unassigned = true;
+    input.assignee = null;
+  } else if (assignee) {
+    input.assignee = { login: assignee };
+  }
+
+  return input;
 }
 
 function readConfigInitArgs(args) {
@@ -362,27 +395,36 @@ async function main() {
       printJson(result);
       return;
     }
+    case 'presets': {
+      const { listPresets } = require('./api/presets');
+      printJson(listPresets());
+      return;
+    }
+    case 'create-task': {
+      const api = createApi(overrides);
+      const input = readCreateIssueArgs(args);
+
+      if (!input.summary) {
+        throw new Error('Missing --summary for create-task.');
+      }
+
+      printJson(await api.createIssue(input));
+      return;
+    }
     case 'create-subtask': {
       const api = createApi(overrides);
-      const issueId = args[0];
-      const summary = readFlag(args, '--summary');
-      const description = readFlag(args, '--description');
-      const priority = readFlag(args, '--priority');
-      const status = readFlag(args, '--status');
-      const assignee = readFlag(args, '--assignee');
+      const issueId = args[0] && !String(args[0]).startsWith('--') ? args[0] : null;
+      const input = readCreateIssueArgs(args);
 
-      if (!summary) {
+      if (!issueId) {
+        throw new Error('create-subtask requires a parent ISSUE id.');
+      }
+
+      if (!input.summary) {
         throw new Error('Missing --summary for create-subtask.');
       }
 
-      const created = await api.createSubtask(issueId, {
-        assignee: assignee ? { login: assignee } : null,
-        description,
-        priority,
-        status,
-        summary,
-      });
-      printJson(created);
+      printJson(await api.createSubtask(issueId, input));
       return;
     }
     case 'status': {

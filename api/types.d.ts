@@ -58,6 +58,7 @@ export interface YouTrackIssue {
   assignee?: YouTrackUser | null;
   priority?: string | null;
   status?: string | null;
+  type?: string | null;
   estimate?: unknown;
   timeSpent?: unknown;
   customFields: Record<string, unknown>;
@@ -67,16 +68,21 @@ export interface YouTrackIssue {
   raw?: unknown;
 }
 
-export interface CreateSubtaskInput {
+export interface CreateIssueInput {
   summary: string;
   description?: string | null;
   projectName?: string;
+  preset?: 'me' | 'task' | 'bug' | string;
+  type?: string | null;
   priority?: string | null;
   status?: string | null;
-  assignee?: YouTrackUser | null;
+  assignee?: YouTrackUser | string | null;
+  unassigned?: boolean;
   estimate?: number | null;
   rawCustomFields?: Record<string, unknown>;
 }
+
+export interface CreateSubtaskInput extends CreateIssueInput {}
 
 export interface UpdateStatusResult {
   issueId: string;

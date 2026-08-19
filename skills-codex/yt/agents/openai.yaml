@@ -1,0 +1,4 @@
+interface:
+  display_name: "YT"
+  short_description: "TailDay YouTrack issues, KB, and config"
+  default_prompt: "Use $yt to operate TailDay YouTrack through the standalone yt CLI: read/search issues, create tasks and bugs with presets (me/task/bug), manage subtasks and statuses, keep assignee unless asked to change it, work with knowledge base articles, and verify or inspect yt configuration before live actions."
